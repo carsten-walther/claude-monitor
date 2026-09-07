@@ -483,12 +483,14 @@ touchscreen:
 image:
   - platform: file
     file: "img/claude-code-32.png"
-    type: BINARY
+    type: RGB
+    transparency: alpha_channel
     id: claude_image_32
     resize: 32x20
   - platform: file
     file: "img/claude-code-128.png"
-    type: BINARY
+    type: RGB
+    transparency: alpha_channel
     id: claude_image_128
     resize: 128x80
 
@@ -509,7 +511,7 @@ lvgl:
         - label:
             id: lbl_splash_name
             x: 0
-            y: 80
+            y: 40
             align: TOP_MID
             text: "${friendly_name}"
             text_color: 0xFFFFFF
@@ -564,7 +566,7 @@ lvgl:
                   id: lv_obj_status_bar_icons
                   x: 0
                   y: 0
-                  width: 60
+                  width: 55
                   height: 18
                   align: TOP_MID
                   bg_color: 0xFFFFFF
@@ -627,14 +629,14 @@ lvgl:
               - image:
                   id: lv_image_claude_32
                   src: claude_image_32
-                  x: 10
-                  y: 0
+                  x: 45
+                  y: 5
                   width: 32
                   height: 20
                   align: TOP_LEFT
               - label:
                   id: lv_label_usage
-                  x: 0
+                  x: 15
                   y: 0
                   align: TOP_MID
                   text: "Usage"
