@@ -587,7 +587,7 @@ lvgl:
                         text_color: 0x444444
                     - label:
                         id: lbl_ble_connected
-                        x: 0
+                        x: 3
                         y: 0
                         align: TOP_MID
                         text: "\uF293"
