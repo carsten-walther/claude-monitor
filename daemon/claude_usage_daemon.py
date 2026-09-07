@@ -8,14 +8,20 @@ Weekly-(7d)-Auslastung als JSON ueber einen lokalen HTTP-Endpoint bereit.
 Das ESPHome-Geraet pollt diesen Endpoint - das Anthropic-Token verlaesst
 diesen Rechner nie.
 
+Zusaetzlich wird bei jedem Poll versucht, dieselben Werte per BLE an den
+ESP32 zu schreiben (Fallback, falls das Geraet nicht per WLAN erreichbar
+ist). Dafuer wird "bleak" benoetigt: pip install bleak
+
 Technik (Keychain-Zugriff, Header-Namen, Request-Body) uebernommen aus
 https://github.com/HermannBjorgvin/Clawdmeter (daemon/claude_usage_daemon.py),
-hier neu geschrieben fuer einen lokalen HTTP-Endpoint statt BLE.
+hier neu geschrieben fuer einen lokalen HTTP-Endpoint plus optionalen
+BLE-Fallback.
 
 Start: python3 claude_usage_daemon.py
 Stop:  Ctrl+C
 """
 
+import asyncio
 import getpass
 import http.server
 import json
@@ -26,10 +32,16 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from bleak import BleakClient, BleakScanner
+
 KEYCHAIN_SERVICE = "Claude Code-credentials"
 POLL_INTERVAL_S = 60
 LISTEN_PORT = 8787
 SECRET_FILE = Path(__file__).parent / "secret.txt"
+
+BLE_DEVICE_NAME = "claude-monitor"
+BLE_CHARACTERISTIC_UUID = "c1a0d001-0000-1000-8000-00805f9b34fb"
+BLE_SCAN_TIMEOUT_S = 5
 
 _lock = threading.Lock()
 _state = {
@@ -125,7 +137,18 @@ def _poll_once() -> None:
         )
 
 
+async def _push_via_ble(payload: bytes) -> None:
+    device = await BleakScanner.find_device_by_name(
+        BLE_DEVICE_NAME, timeout=BLE_SCAN_TIMEOUT_S
+    )
+    if device is None:
+        return
+    async with BleakClient(device) as client:
+        await client.write_gatt_char(BLE_CHARACTERISTIC_UUID, payload, response=False)
+
+
 def _poll_loop() -> None:
+    ble_loop = asyncio.new_event_loop()
     while True:
         try:
             _poll_once()
@@ -133,6 +156,12 @@ def _poll_loop() -> None:
             print(f"[claude-usage-daemon] Poll fehlgeschlagen: {exc}")
             with _lock:
                 _state["ok"] = False
+        try:
+            with _lock:
+                payload = json.dumps(_state).encode("utf-8")
+            ble_loop.run_until_complete(_push_via_ble(payload))
+        except Exception as exc:  # BLE ist nur Fallback, WLAN-Pfad bleibt unberuehrt
+            print(f"[claude-usage-daemon] BLE-Push fehlgeschlagen: {exc}")
         time.sleep(POLL_INTERVAL_S)
 
 

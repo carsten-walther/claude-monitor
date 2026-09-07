@@ -175,6 +175,35 @@ http_request:
   verify_ssl: false
 
 #
+# https://esphome.io/components/esp32_ble_server
+# BLE-Fallback fuer Usage-Daten, wenn der Mac-Daemon den ESP32 nicht per WLAN
+# erreicht. Gleiche UUIDs muessen im Daemon (claude-monitor/daemon/) verwendet werden.
+#
+esp32_ble_server:
+  manufacturer: "${author_name}"
+  services:
+    - uuid: "c1a0d000-0000-1000-8000-00805f9b34fb"
+      characteristics:
+        - uuid: "c1a0d001-0000-1000-8000-00805f9b34fb"
+          write: true
+          write_no_response: true
+          on_write:
+            then:
+              - script.execute:
+                  id: apply_usage_json
+                  json_body: !lambda 'return std::string(x.begin(), x.end());'
+  on_connect:
+    then:
+      - lvgl.widget.update:
+          id: lbl_ble_connected
+          text_color: 0xFFFFFF
+  on_disconnect:
+    then:
+      - lvgl.widget.update:
+          id: lbl_ble_connected
+          text_color: 0x444444
+
+#
 # https://esphome.io/components/globals
 # Zwischenspeicher für die per http_request.get abgefragten Nutzungswerte.
 #
@@ -221,46 +250,9 @@ interval:
                     - lvgl.widget.update:
                         id: lbl_claude_connected
                         text_color: 0xFFFFFF
-                    - lambda: |-
-                        json::parse_json(body, [](JsonObject root) -> bool {
-                          if (root["current"].is<int>()) id(usage_current_pct) = root["current"];
-                          if (root["current_reset_min"].is<int>()) id(usage_current_reset_min) = root["current_reset_min"];
-                          if (root["weekly"].is<int>()) id(usage_weekly_pct) = root["weekly"];
-                          if (root["weekly_reset_min"].is<int>()) id(usage_weekly_reset_min) = root["weekly_reset_min"];
-                          return true;
-                        });
-                    - lvgl.bar.update:
-                        id: bar_usage_current
-                        value: !lambda 'return id(usage_current_pct);'
-                    - lvgl.bar.update:
-                        id: bar_usage_weekly
-                        value: !lambda 'return id(usage_weekly_pct);'
-                    - lvgl.label.update:
-                        id: lbl_usage_current_pct
-                        text: !lambda |-
-                          char buf[8];
-                          snprintf(buf, sizeof(buf), "%d%%", id(usage_current_pct));
-                          return std::string(buf);
-                    - lvgl.label.update:
-                        id: lbl_usage_weekly_pct
-                        text: !lambda |-
-                          char buf[8];
-                          snprintf(buf, sizeof(buf), "%d%%", id(usage_weekly_pct));
-                          return std::string(buf);
-                    - lvgl.label.update:
-                        id: lbl_usage_current_reset
-                        text: !lambda |-
-                          int m = id(usage_current_reset_min);
-                          char buf[24];
-                          snprintf(buf, sizeof(buf), "Resets in %dh %02dm", m / 60, m % 60);
-                          return std::string(buf);
-                    - lvgl.label.update:
-                        id: lbl_usage_weekly_reset
-                        text: !lambda |-
-                          int m = id(usage_weekly_reset_min);
-                          char buf[24];
-                          snprintf(buf, sizeof(buf), "Resets in %dd %dh", m / 1440, (m % 1440) / 60);
-                          return std::string(buf);
+                    - script.execute:
+                        id: apply_usage_json
+                        json_body: !lambda 'return body;'
                   else:
                     - lvgl.widget.update:
                         id: lbl_claude_connected
@@ -325,6 +317,53 @@ script:
             - lvgl.label.update:
                 id: lbl_date
                 text: !lambda 'return id(sntp_time).now().strftime("%d.%m.%Y");'
+
+  # Gemeinsames Update fuer Usage-Daten, egal ob per HTTP (WLAN) oder BLE-Write empfangen.
+  - id: apply_usage_json
+    mode: single
+    parameters:
+      json_body: string
+    then:
+      - lambda: |-
+          json::parse_json(json_body, [](JsonObject root) -> bool {
+            if (root["current"].is<int>()) id(usage_current_pct) = root["current"];
+            if (root["current_reset_min"].is<int>()) id(usage_current_reset_min) = root["current_reset_min"];
+            if (root["weekly"].is<int>()) id(usage_weekly_pct) = root["weekly"];
+            if (root["weekly_reset_min"].is<int>()) id(usage_weekly_reset_min) = root["weekly_reset_min"];
+            return true;
+          });
+      - lvgl.bar.update:
+          id: bar_usage_current
+          value: !lambda 'return id(usage_current_pct);'
+      - lvgl.bar.update:
+          id: bar_usage_weekly
+          value: !lambda 'return id(usage_weekly_pct);'
+      - lvgl.label.update:
+          id: lbl_usage_current_pct
+          text: !lambda |-
+            char buf[8];
+            snprintf(buf, sizeof(buf), "%d%%", id(usage_current_pct));
+            return std::string(buf);
+      - lvgl.label.update:
+          id: lbl_usage_weekly_pct
+          text: !lambda |-
+            char buf[8];
+            snprintf(buf, sizeof(buf), "%d%%", id(usage_weekly_pct));
+            return std::string(buf);
+      - lvgl.label.update:
+          id: lbl_usage_current_reset
+          text: !lambda |-
+            int m = id(usage_current_reset_min);
+            char buf[24];
+            snprintf(buf, sizeof(buf), "Resets in %dh %02dm", m / 60, m % 60);
+            return std::string(buf);
+      - lvgl.label.update:
+          id: lbl_usage_weekly_reset
+          text: !lambda |-
+            int m = id(usage_weekly_reset_min);
+            char buf[24];
+            snprintf(buf, sizeof(buf), "Resets in %dd %dh", m / 1440, (m % 1440) / 60);
+            return std::string(buf);
 
 #
 # https://esphome.io/components/output
