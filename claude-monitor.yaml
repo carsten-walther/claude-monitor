@@ -41,7 +41,7 @@ substitutions:
   # Host-Daemon für Claude-Code-Token-Verbrauch (claude-monitor/daemon/).
   # IP ist die aktuelle LAN-IP des Mac im selben Netz wie das Gerät -
   # bei DHCP-Wechsel hier anpassen.
-  USAGE_DAEMON_URL: http://192.168.2.1:8787/usage
+  USAGE_DAEMON_URL: http://192.168.178.86:8787/usage
 
 #
 # https://esphome.io/components/esphome
@@ -252,14 +252,14 @@ interval:
                         text: !lambda |-
                           int m = id(usage_current_reset_min);
                           char buf[24];
-                          snprintf(buf, sizeof(buf), "Reset %dh %02dm", m / 60, m % 60);
+                          snprintf(buf, sizeof(buf), "Resets in %dh %02dm", m / 60, m % 60);
                           return std::string(buf);
                     - lvgl.label.update:
                         id: lbl_usage_weekly_reset
                         text: !lambda |-
                           int m = id(usage_weekly_reset_min);
                           char buf[24];
-                          snprintf(buf, sizeof(buf), "Reset %dd %dh", m / 1440, (m % 1440) / 60);
+                          snprintf(buf, sizeof(buf), "Resets in %dd %dh", m / 1440, (m % 1440) / 60);
                           return std::string(buf);
                   else:
                     - lvgl.widget.update:
@@ -433,6 +433,7 @@ sensor:
 display:
   - platform: mipi_spi
     id: esp_display
+    # model: ESP32-2432S028
     model: ESP32-2432S028-7789
     spi_id: spi_bus
     cs_pin:
@@ -477,6 +478,21 @@ touchscreen:
     mirror_y: true
 
 #
+# https://esphome.io/components/image
+#
+image:
+  - platform: file
+    file: "img/claude-code-32.png"
+    type: BINARY
+    id: claude_image_32
+    resize: 32x20
+  - platform: file
+    file: "img/claude-code-128.png"
+    type: BINARY
+    id: claude_image_128
+    resize: 128x80
+
+#
 # https://esphome.io/components/lvgl
 #
 lvgl:
@@ -499,6 +515,14 @@ lvgl:
             text_color: 0xFFFFFF
             text_align: CENTER
             text_font: montserrat_28
+        - image:
+            id: lv_image_claude_128
+            src: claude_image_128
+            x: 0
+            y: 120
+            width: 128
+            height: 80
+            align: TOP_MID
         - label:
             id: lbl_splash_version
             x: 0
@@ -518,7 +542,8 @@ lvgl:
             id: lv_obj_status_bar_top
             x: 0
             y: 0
-            width: 100%
+            width: 240
+            height: 18
             align: TOP_MID
             bg_color: 0xFFFFFF
             bg_opa: 0%
@@ -528,17 +553,19 @@ lvgl:
             scrollbar_mode: "OFF"
             widgets:
               - label:
-                  id: lbl_date
+                  id: lbl_time
                   x: 0
                   y: 0
-                  align: TOP_RIGHT
-                  text: "--.--.----"
+                  align: TOP_LEFT
+                  text: "--:--"
                   text_color: 0xFFFFFF
                   text_font: montserrat_14
               - obj:
                   id: lv_obj_status_bar_icons
                   x: 0
                   y: 0
+                  width: 60
+                  height: 18
                   align: TOP_MID
                   bg_color: 0xFFFFFF
                   bg_opa: 0%
@@ -553,7 +580,16 @@ lvgl:
                         y: 0
                         align: TOP_LEFT
                         text: "\uF1EB"
-                        text_font: montserrat_14
+                        text_font: montserrat_12
+                        text_align: CENTER
+                        text_color: 0x444444
+                    - label:
+                        id: lbl_ble_connected
+                        x: 0
+                        y: 0
+                        align: TOP_MID
+                        text: "\uF293"
+                        text_font: montserrat_12
                         text_align: CENTER
                         text_color: 0x444444
                     - label:
@@ -562,117 +598,179 @@ lvgl:
                         y: 0
                         align: TOP_RIGHT
                         text: "\uF0E7"
-                        text_font: montserrat_14
+                        text_font: montserrat_12
                         text_align: CENTER
                         text_color: 0x444444
               - label:
-                  id: lbl_time
+                  id: lbl_date
                   x: 0
                   y: 0
-                  align: TOP_LEFT
-                  text: "--:--"
+                  align: TOP_RIGHT
+                  text: "--.--.----"
                   text_color: 0xFFFFFF
                   text_font: montserrat_14
 
-        # Claude-Code-Tokenverbrauch (Current = 5h-Fenster, Weekly = 7d-Fenster),
-        # Werte kommen vom Host-Daemon, siehe interval oben.
-        - label:
-            id: lbl_usage_current_pct
-            x: 10
-            y: 30
-            align: TOP_LEFT
-            text: "--%"
-            text_color: 0xFFFFFF
-            text_font: montserrat_14
-        - label:
-            id: lbl_usage_current_label
-            x: -10
-            y: 30
-            align: TOP_RIGHT
-            text: "Current"
-            text_color: 0xAAAAAA
-            text_font: montserrat_14
-        - bar:
-            id: bar_usage_current
+        - obj:
+            id: lv_obj_bars
             x: 0
-            y: 50
-            align: TOP_MID
-            width: 300
-            height: 12
-            min_value: 0
-            max_value: 100
-            value: 0
-            animated: true
-            bg_color: 0x333333
-            radius: 6
-            indicator:
-              bg_color: 0x4CAF50
-              bg_opa: COVER
-        - label:
-            id: lbl_usage_current_reset
-            x: 10
-            y: 66
-            align: TOP_LEFT
-            text: "Reset --h --m"
-            text_color: 0x888888
-            text_font: montserrat_14
-
-        - label:
-            id: lbl_usage_weekly_pct
-            x: 10
-            y: 100
-            align: TOP_LEFT
-            text: "--%"
-            text_color: 0xFFFFFF
-            text_font: montserrat_14
-        - label:
-            id: lbl_usage_weekly_label
-            x: -10
-            y: 100
-            align: TOP_RIGHT
-            text: "Weekly"
-            text_color: 0xAAAAAA
-            text_font: montserrat_14
-        - bar:
-            id: bar_usage_weekly
-            x: 0
-            y: 120
-            align: TOP_MID
-            width: 300
-            height: 12
-            min_value: 0
-            max_value: 100
-            value: 0
-            animated: true
-            bg_color: 0x333333
-            radius: 6
-            indicator:
-              bg_color: 0x4CAF50
-              bg_opa: COVER
-        - label:
-            id: lbl_usage_weekly_reset
-            x: 10
-            y: 136
-            align: TOP_LEFT
-            text: "Reset --d --h"
-            text_color: 0x888888
-            text_font: montserrat_14
-
-        # Rein dekorative Animation, siehe interval oben.
-        - label:
-            id: lbl_status
-            x: 0
-            y: 170
-            align: TOP_MID
-            text: "Working..."
-            text_color: 0xFF8A3D
-            text_font: montserrat_14
+            y: 0
+            width: 240
+            height: 280
+            align: CENTER
+            bg_color: 0xFFFFFF
+            bg_opa: 0%
+            border_width: 0
+            border_color: 0x000000
+            pad_all: 4
+            scrollbar_mode: "OFF"
+            widgets:
+              - image:
+                  id: lv_image_claude_32
+                  src: claude_image_32
+                  x: 10
+                  y: 0
+                  width: 32
+                  height: 20
+                  align: TOP_LEFT
+              - label:
+                  id: lv_label_usage
+                  x: 0
+                  y: 0
+                  align: TOP_MID
+                  text: "Usage"
+                  text_color: 0xFFFFFF
+                  text_font: montserrat_24
+              - obj:
+                  id: lv_obj_current_usage
+                  x: 0
+                  y: 40
+                  width: 240
+                  height: 90
+                  align: TOP_MID
+                  bg_color: 0x333333
+                  border_width: 0
+                  border_color: 0xE0E0E0
+                  radius: 4
+                  pad_all: 8
+                  scrollbar_mode: "OFF"
+                  widgets:
+                    - label:
+                        id: lbl_usage_current_pct
+                        x: 0
+                        y: 0
+                        align: TOP_LEFT
+                        text: "--%"
+                        text_color: 0xFFFFFF
+                        text_font: montserrat_22
+                    - label:
+                        id: lbl_usage_current_label
+                        x: 0
+                        y: 0
+                        align: TOP_RIGHT
+                        text: "Current"
+                        text_color: 0xFFFFFF
+                        bg_color: 0x666666
+                        bg_opa: 100%
+                        text_align: CENTER
+                        text_font: montserrat_14
+                        radius: 10
+                        pad_all: 4
+                    - bar:
+                        id: bar_usage_current
+                        x: 0
+                        y: 4
+                        width: 224
+                        height: 20
+                        align: CENTER
+                        value: 0
+                        min_value: 0
+                        max_value: 100
+                        indicator:
+                          bg_color: 0x4CAF50
+                        bg_color: 0x666666
+                        radius: 10
+                        bg_opa: 100%
+                    - label:
+                        id: lbl_usage_current_reset
+                        x: 0
+                        y: 0
+                        align: BOTTOM_LEFT
+                        text: "Resets in --h --m"
+                        text_color: 0xFFFFFF
+                        text_font: montserrat_14
+              - obj:
+                  id: lv_obj_weekly_usage
+                  x: 0
+                  y: 145
+                  width: 240
+                  height: 90
+                  align: TOP_MID
+                  bg_color: 0x333333
+                  border_width: 0
+                  border_color: 0xE0E0E0
+                  radius: 4
+                  pad_all: 8
+                  scrollbar_mode: "OFF"
+                  widgets:
+                    - label:
+                        id: lbl_usage_weekly_pct
+                        x: 0
+                        y: 0
+                        align: TOP_LEFT
+                        text: "--%"
+                        text_color: 0xFFFFFF
+                        text_font: montserrat_22
+                    - label:
+                        id: lbl_usage_weekly_label
+                        x: 0
+                        y: 0
+                        align: TOP_RIGHT
+                        text: "Weekly"
+                        text_color: 0xFFFFFF
+                        bg_color: 0x666666
+                        bg_opa: 100%
+                        text_align: CENTER
+                        text_font: montserrat_14
+                        radius: 10
+                        pad_all: 4
+                    - bar:
+                        id: bar_usage_weekly
+                        x: 0
+                        y: 4
+                        width: 224
+                        height: 20
+                        align: CENTER
+                        value: 0
+                        min_value: 0
+                        max_value: 100
+                        indicator:
+                          bg_color: 0x4CAF50
+                        bg_color: 0x666666
+                        radius: 10
+                        bg_opa: 100%
+                    - label:
+                        id: lbl_usage_weekly_reset
+                        x: 0
+                        y: 0
+                        align: BOTTOM_LEFT
+                        text: "Resets in --d --h"
+                        text_color: 0xFFFFFF
+                        text_font: montserrat_14
+              - label:
+                  id: lbl_status
+                  x: 0
+                  y: -3
+                  align: BOTTOM_MID
+                  text: "Working..."
+                  text_color: 0xFF8A3D
+                  text_font: montserrat_16
 
         - obj:
             id: lv_obj_status_bar_bottom
             x: 0
             y: 0
-            width: 100%
+            width: 240
+            height: 18
             align: BOTTOM_MID
             bg_color: 0xFFFFFF
             bg_opa: 0%
