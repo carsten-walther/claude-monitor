@@ -35,7 +35,7 @@ class ClaudeUsageMenuBarApp(rumps.App):
     def _refresh_title(self, _sender):
         s = core.state
         if not s["ok"]:
-            self.title = "⚠️ claude-monitor"
+            self.title = "Claude Monitor"
             return
         self.title = f"5h {s['current']}% · 7d {s['weekly']}%"
 

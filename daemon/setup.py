@@ -1,8 +1,8 @@
 """
-py2app-Buildkonfiguration fuer die claude-monitor Menueleisten-App.
+py2app-Buildkonfiguration fuer die Claude Monitor Menueleisten-App.
 
 Bauen: python3 setup.py py2app
-Ergebnis: dist/claude-monitor.app
+Ergebnis: dist/Claude Monitor.app
 """
 
 from setuptools import setup
@@ -12,13 +12,14 @@ OPTIONS = {
     "argv_emulation": False,
     "strip": True,
     "excludes": ["tkinter", "setuptools", "pip", "wheel"],
+    "iconfile": "claude-monitor.icns",
     "plist": {
-        "CFBundleName": "claude-monitor",
-        "CFBundleIdentifier": "de.599media.claude-monitor",
+        "CFBundleName": "Claude Monitor",
+        "CFBundleIdentifier": "de.carstenwalther.claude-monitor",
         "LSUIElement": True,  # nur Menueleiste, kein Dock-Icon
         "NSBluetoothAlwaysUsageDescription": (
-            "claude-monitor sendet Nutzungsdaten per Bluetooth an das "
-            "ESP32-Display."
+            "Claude Monitor sendet Nutzungsdaten per Bluetooth an das "
+            "Claude Monitor-Display."
         ),
     },
     "packages": ["rumps", "bleak"],
