@@ -27,17 +27,30 @@ LOG_FILE = Path.home() / "Library" / "Logs" / "claude-monitor-daemon.log"
 class ClaudeUsageMenuBarApp(rumps.App):
     def __init__(self):
         super().__init__("claude-monitor", title="claude-monitor …")
-        self.menu = ["Jetzt aktualisieren", "Log oeffnen"]
+        self.ble_push_item = rumps.MenuItem(
+            "Bluetooth Push aktiv", callback=self.toggle_ble_push
+        )
+        self.ble_push_item.state = core.ble_push_enabled
+        self.menu = ["Jetzt aktualisieren", self.ble_push_item, "Log oeffnen"]
         threading.Thread(target=core.main, daemon=True).start()
         self.timer = rumps.Timer(self._refresh_title, 5)
         self.timer.start()
+
+    def toggle_ble_push(self, sender):
+        core.ble_push_enabled = not core.ble_push_enabled
+        sender.state = core.ble_push_enabled
 
     def _refresh_title(self, _sender):
         s = core.state
         if not s["ok"]:
             self.title = "Claude Monitor"
             return
-        self.title = f"5h {s['current']}% · 7d {s['weekly']}%"
+        usage = f"5h {s['current']}% · 7d {s['weekly']}%"
+        if s["waiting"]:
+            project = s["project"] or "Claude"
+            self.title = f"🔔 {project} · {usage}"
+        else:
+            self.title = usage
 
     @rumps.clicked("Jetzt aktualisieren")
     def refresh_now(self, _sender):

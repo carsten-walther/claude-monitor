@@ -42,6 +42,10 @@ BLE_SCAN_TIMEOUT_S = 5
 # mehrere Versuche pro Zyklus gleichen das aus.
 BLE_SCAN_RETRIES = 3
 
+# Von menubar_app.py umschaltbar: bei False laeuft der Token-Poll normal
+# weiter (Menueleisten-Titel bleibt aktuell), nur der BLE-Write entfaellt.
+ble_push_enabled = True
+
 state = {
     "current": 0,
     "current_reset_min": 0,
@@ -172,15 +176,16 @@ def run_forever() -> None:
             next_token_poll = time.time() + TOKEN_POLL_INTERVAL_S
         state["epoch"] = int(time.time())
         state.update(_read_claude_status())
-        try:
-            payload = json.dumps(state).encode("utf-8")
-            # Frischer Event-Loop pro Zyklus: ein ueber die gesamte Laufzeit
-            # wiederverwendeter Loop macht BleakScanner/CoreBluetooth auf macOS
-            # nach einigen Dutzend Zyklen zunehmend unzuverlaessig (empirisch
-            # geprueft: 2 von 6 Zyklen mit persistentem Loop schlugen fehl).
-            asyncio.run(_push_via_ble(payload))
-        except Exception as exc:
-            print(f"[claude-usage-daemon] BLE-Push fehlgeschlagen: {exc}")
+        if ble_push_enabled:
+            try:
+                payload = json.dumps(state).encode("utf-8")
+                # Frischer Event-Loop pro Zyklus: ein ueber die gesamte Laufzeit
+                # wiederverwendeter Loop macht BleakScanner/CoreBluetooth auf macOS
+                # nach einigen Dutzend Zyklen zunehmend unzuverlaessig (empirisch
+                # geprueft: 2 von 6 Zyklen mit persistentem Loop schlugen fehl).
+                asyncio.run(_push_via_ble(payload))
+            except Exception as exc:
+                print(f"[claude-usage-daemon] BLE-Push fehlgeschlagen: {exc}")
         time.sleep(BLE_PUSH_INTERVAL_S)
 
 
