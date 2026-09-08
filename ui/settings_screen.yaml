@@ -1,0 +1,72 @@
+- id: settings_screen
+  bg_color: 0x000000
+  pad_all: 0
+  scrollbar_mode: "OFF"
+  widgets:
+
+    - obj:
+        id: settings_screen_title_bar
+        x: 0
+        y: 30
+        width: 100%
+        align: TOP_LEFT
+        bg_opa: 0%
+        border_width: 0
+        pad_all: 0
+        scrollbar_mode: "OFF"
+        widgets:
+
+          - image:
+              id: settings_screen_title_bar_image
+              src: claude_image_32
+              x: 0
+              y: 0
+              width: 32
+              height: 20
+              align: TOP_LEFT
+
+          - label:
+              id: settings_screen_title_bar_label
+              x: 40
+              y: -5
+              align: TOP_LEFT
+              text: "Settings"
+              text_color: 0xFFFFFF
+              text_font: montserrat_24
+
+    - obj:
+        id: main_screen_content
+        x: 0
+        y: 20
+        width: 240
+        height: 200
+        align: CENTER
+        bg_opa: 0%
+        border_width: 0
+        pad_all: 0
+        scrollbar_mode: "OFF"
+        widgets: []
+
+    - obj:
+        id: lv_obj_status_bar_bottom
+        x: 0
+        y: 0
+        width: 240
+        height: 18
+        align: BOTTOM_MID
+        bg_color: 0xFFFFFF
+        bg_opa: 0%
+        border_width: 0
+        border_color: 0xE0E0E0
+        pad_all: 0
+        scrollbar_mode: "OFF"
+        widgets:
+        
+          - label:
+              id: lbl_ip
+              x: 0
+              y: 0
+              align: BOTTOM_MID
+              text: "---.---.---.---"
+              text_color: 0xFFFFFF
+              text_font: montserrat_14

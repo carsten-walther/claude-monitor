@@ -1,0 +1,54 @@
+- obj:
+    id: status_bar_top
+    x: 0
+    y: 0
+    width: 100%
+    height: 20
+    align: TOP_MID
+    bg_color: 0xFFFFFF
+    bg_opa: 0%
+    border_width: 0
+    border_color: 0xE0E0E0
+    pad_all: 0
+    scrollbar_mode: "OFF"
+    widgets:
+
+      - label:
+          id: lbl_time
+          x: 0
+          y: 0
+          align: TOP_LEFT
+          text: ""
+          text_font: montserrat_14
+          text_align: CENTER
+          text_color: 0xFFFFFF
+
+      - label:
+          id: lbl_ble_connected
+          x: -35
+          y: 0
+          align: TOP_RIGHT
+          text: "\uF293"
+          text_font: montserrat_12
+          text_align: CENTER
+          text_color: 0x444444
+
+      - label:
+          id: lbl_claude_connected
+          x: -20
+          y: 0
+          align: TOP_RIGHT
+          text: "\uF0E7"
+          text_font: montserrat_12
+          text_align: CENTER
+          text_color: 0x444444
+
+      - label:
+          id: lbl_wifi_connected
+          x: 0
+          y: 0
+          align: TOP_RIGHT
+          text: "\uF1EB"
+          text_font: montserrat_12
+          text_align: CENTER
+          text_color: 0x444444
