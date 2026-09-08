@@ -268,7 +268,10 @@ script:
           then:
             - light.turn_on:
                 id: status_rgb
-                effect: "waiting_blink"
+                effect: "waiting_pulse"
+                red: 100%
+                green: 54%
+                blue: 24%
           else:
             - light.turn_off: status_rgb
       - lvgl.bar.update:
@@ -358,17 +361,12 @@ light:
     blue: led_b
     restore_mode: ALWAYS_OFF
     effects:
-      - strobe:
-          name: "waiting_blink"
-          colors:
-            - state: true
-              brightness: 100%
-              red: 100%
-              green: 54%
-              blue: 24%
-              duration: 500ms
-            - state: false
-              duration: 500ms
+      - pulse:
+          name: "waiting_pulse"
+          transition_length: 1000ms
+          update_interval: 1000ms
+          min_brightness: 20%
+          max_brightness: 100%
 
 #
 # https://esphome.io/components/sensor

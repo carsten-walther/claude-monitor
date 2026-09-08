@@ -11,3 +11,8 @@ daemon/secret.txt
 
 # Python Cache
 __pycache__/
+
+# py2app build artifacts (daemon/menubar_app.py -> daemon/setup.py)
+daemon/.eggs/
+daemon/build/
+daemon/dist/
