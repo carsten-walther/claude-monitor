@@ -37,7 +37,7 @@
     - obj:
         id: main_screen_content
         x: 0
-        y: 20
+        y: 0
         width: 240
         height: 200
         align: CENTER
@@ -170,9 +170,18 @@
                     text: "Resets in --d --h"
                     text_color: 0xFFFFFF
                     text_font: montserrat_14
-                    
+    
     - label:
         id: lbl_status
+        x: 0
+        y: -25
+        align: BOTTOM_MID
+        text: ""
+        text_color: 0xFFFFFF
+        text_font: montserrat_14
+
+    - label:
+        id: lbl_animated_text
         x: 0
         y: 0
         align: BOTTOM_MID

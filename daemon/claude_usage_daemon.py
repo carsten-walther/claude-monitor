@@ -3,19 +3,11 @@
 Claude Usage Daemon fuer claude-monitor.
 
 Liest das Claude Code OAuth-Token aus der macOS Keychain, fragt bei
-api.anthropic.com die Rate-Limit-Header ab und stellt Current-(5h)- und
-Weekly-(7d)-Auslastung als JSON ueber einen lokalen HTTP-Endpoint bereit.
-Das ESPHome-Geraet pollt diesen Endpoint - das Anthropic-Token verlaesst
-diesen Rechner nie.
-
-Zusaetzlich wird bei jedem Poll versucht, dieselben Werte per BLE an den
-ESP32 zu schreiben (Fallback, falls das Geraet nicht per WLAN erreichbar
-ist). Dafuer wird "bleak" benoetigt: pip install bleak
-
-Technik (Keychain-Zugriff, Header-Namen, Request-Body) uebernommen aus
-https://github.com/HermannBjorgvin/Clawdmeter (daemon/claude_usage_daemon.py),
-hier neu geschrieben fuer einen lokalen HTTP-Endpoint plus optionalen
-BLE-Fallback.
+api.anthropic.com die Rate-Limit-Header ab und schreibt Current-(5h)- und
+Weekly-(7d)-Auslastung als JSON per BLE an den ESP32 (Characteristic-Write,
+siehe esp32_ble_server in claude-monitor.yaml). Kein WLAN, kein HTTP-Endpoint -
+das Anthropic-Token verlaesst diesen Rechner nie. Dafuer wird "bleak"
+benoetigt: pip install bleak
 
 Start: python3 claude_usage_daemon.py
 Stop:  Ctrl+C
@@ -23,10 +15,8 @@ Stop:  Ctrl+C
 
 import asyncio
 import getpass
-import http.server
 import json
 import subprocess
-import threading
 import time
 import urllib.error
 import urllib.request
@@ -36,30 +26,42 @@ from bleak import BleakClient, BleakScanner
 
 KEYCHAIN_SERVICE = "Claude Code-credentials"
 POLL_INTERVAL_S = 60
-LISTEN_PORT = 8787
-SECRET_FILE = Path(__file__).parent / "secret.txt"
+
+# Wird von ~/.local/bin/claude_hook.py (Claude-Code-Hooks) geschrieben.
+STATUS_FILE = Path.home() / ".claude" / "claude-monitor-status.json"
 
 BLE_DEVICE_NAME = "claude-monitor"
 BLE_CHARACTERISTIC_UUID = "c1a0d001-0000-1000-8000-00805f9b34fb"
 BLE_SCAN_TIMEOUT_S = 5
+# find_device_by_name findet die Werbe-Pakete auch bei gutem Empfang nicht
+# zuverlaessig in einem einzelnen Scan (empirisch: ~50% Fehlerquote bei 5s) -
+# mehrere Versuche pro Zyklus gleichen das aus.
+BLE_SCAN_RETRIES = 3
 
-_lock = threading.Lock()
 _state = {
     "current": 0,
     "current_reset_min": 0,
     "weekly": 0,
     "weekly_reset_min": 0,
+    "epoch": 0,
     "ok": False,
+    "project": "",
+    "waiting": False,
 }
 
 
-def _load_shared_secret() -> str:
-    if not SECRET_FILE.exists():
-        raise SystemExit(
-            f"Fehlt: {SECRET_FILE}. Muss den gleichen Wert enthalten wie "
-            "'usage_daemon_secret' in secrets.yaml."
-        )
-    return SECRET_FILE.read_text().strip()
+def _read_claude_status() -> dict:
+    """Liest project/waiting aus der von claude_hook.py geschriebenen Datei.
+    Fehlt sie oder ist sie kaputt, gilt: kein Projekt, nicht wartend."""
+    try:
+        with open(STATUS_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        return {
+            "project": str(data.get("project", "")),
+            "waiting": bool(data.get("waiting", False)),
+        }
+    except Exception:
+        return {"project": "", "waiting": False}
 
 
 def _read_access_token() -> str:
@@ -125,77 +127,59 @@ def _poll_once() -> None:
         headers = resp.headers
         resp.read()
 
-    with _lock:
-        _state.update(
-            {
-                "current": _pct(headers.get("anthropic-ratelimit-unified-5h-utilization")),
-                "current_reset_min": _reset_minutes(headers.get("anthropic-ratelimit-unified-5h-reset")),
-                "weekly": _pct(headers.get("anthropic-ratelimit-unified-7d-utilization")),
-                "weekly_reset_min": _reset_minutes(headers.get("anthropic-ratelimit-unified-7d-reset")),
-                "ok": True,
-            }
-        )
+    _state.update(
+        {
+            "current": _pct(headers.get("anthropic-ratelimit-unified-5h-utilization")),
+            "current_reset_min": _reset_minutes(headers.get("anthropic-ratelimit-unified-5h-reset")),
+            "weekly": _pct(headers.get("anthropic-ratelimit-unified-7d-utilization")),
+            "weekly_reset_min": _reset_minutes(headers.get("anthropic-ratelimit-unified-7d-reset")),
+            "ok": True,
+        }
+    )
 
 
 async def _push_via_ble(payload: bytes) -> None:
-    device = await BleakScanner.find_device_by_name(
-        BLE_DEVICE_NAME, timeout=BLE_SCAN_TIMEOUT_S
-    )
+    device = None
+    for attempt in range(1, BLE_SCAN_RETRIES + 1):
+        device = await BleakScanner.find_device_by_name(
+            BLE_DEVICE_NAME, timeout=BLE_SCAN_TIMEOUT_S
+        )
+        if device is not None:
+            break
+        print(f"[claude-usage-daemon] '{BLE_DEVICE_NAME}' nicht gefunden (Versuch {attempt}/{BLE_SCAN_RETRIES})")
     if device is None:
         return
     async with BleakClient(device) as client:
-        await client.write_gatt_char(BLE_CHARACTERISTIC_UUID, payload, response=False)
+        # response=True (bestaetigter GATT-Write) statt write-without-response:
+        # unbestaetigte Writes kamen im Test wiederholt nie beim ESP32 an,
+        # bestaetigte zuverlaessig.
+        await client.write_gatt_char(BLE_CHARACTERISTIC_UUID, payload, response=True)
 
 
 def _poll_loop() -> None:
-    ble_loop = asyncio.new_event_loop()
     while True:
         try:
             _poll_once()
         except Exception as exc:  # Daemon soll bei Fehlern weiterlaufen
             print(f"[claude-usage-daemon] Poll fehlgeschlagen: {exc}")
-            with _lock:
-                _state["ok"] = False
+            _state["ok"] = False
+        _state["epoch"] = int(time.time())
+        _state.update(_read_claude_status())
         try:
-            with _lock:
-                payload = json.dumps(_state).encode("utf-8")
-            ble_loop.run_until_complete(_push_via_ble(payload))
-        except Exception as exc:  # BLE ist nur Fallback, WLAN-Pfad bleibt unberuehrt
+            payload = json.dumps(_state).encode("utf-8")
+            # Frischer Event-Loop pro Zyklus: ein ueber die gesamte Laufzeit
+            # wiederverwendeter Loop macht BleakScanner/CoreBluetooth auf macOS
+            # nach einigen Dutzend Zyklen zunehmend unzuverlaessig (empirisch
+            # geprueft: 2 von 6 Zyklen mit persistentem Loop schlugen fehl).
+            asyncio.run(_push_via_ble(payload))
+        except Exception as exc:
             print(f"[claude-usage-daemon] BLE-Push fehlgeschlagen: {exc}")
         time.sleep(POLL_INTERVAL_S)
 
 
-def _make_handler(shared_secret: str):
-    class Handler(http.server.BaseHTTPRequestHandler):
-        def do_GET(self):
-            if self.path != "/usage":
-                self.send_response(404)
-                self.end_headers()
-                return
-            if self.headers.get("X-Auth") != shared_secret:
-                self.send_response(401)
-                self.end_headers()
-                return
-            with _lock:
-                payload = json.dumps(_state).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(payload)))
-            self.end_headers()
-            self.wfile.write(payload)
-
-        def log_message(self, format, *args):  # kein Access-Log auf stdout
-            pass
-
-    return Handler
-
-
 def main() -> None:
-    shared_secret = _load_shared_secret()
-    threading.Thread(target=_poll_loop, daemon=True).start()
-    server = http.server.ThreadingHTTPServer(("0.0.0.0", LISTEN_PORT), _make_handler(shared_secret))
-    print(f"[claude-usage-daemon] Laeuft auf Port {LISTEN_PORT}, Poll alle {POLL_INTERVAL_S}s")
-    server.serve_forever()
+    print(f"[claude-usage-daemon] BLE-Push alle {POLL_INTERVAL_S}s an '{BLE_DEVICE_NAME}'")
+    _poll_loop()
 
 
 if __name__ == "__main__":
