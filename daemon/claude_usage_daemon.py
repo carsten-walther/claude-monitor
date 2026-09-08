@@ -25,7 +25,11 @@ from pathlib import Path
 from bleak import BleakClient, BleakScanner
 
 KEYCHAIN_SERVICE = "Claude Code-credentials"
-POLL_INTERVAL_S = 60
+# BLE-Push (inkl. waiting-Status aus STATUS_FILE) und Token-Poll (Anthropic-API)
+# laufen unabhaengig: das BLE-Device soll zeitnah aktualisiert werden, die
+# Token-Abfrage aber nicht bei jedem Zyklus unnoetig Rate-Limit-Kontingent ziehen.
+BLE_PUSH_INTERVAL_S = 5
+TOKEN_POLL_INTERVAL_S = 5 * 60
 
 # Wird von ~/.local/bin/claude_hook.py (Claude-Code-Hooks) geschrieben.
 STATUS_FILE = Path.home() / ".claude" / "claude-monitor-status.json"
@@ -157,12 +161,15 @@ async def _push_via_ble(payload: bytes) -> None:
 
 
 def _poll_loop() -> None:
+    next_token_poll = 0.0
     while True:
-        try:
-            _poll_once()
-        except Exception as exc:  # Daemon soll bei Fehlern weiterlaufen
-            print(f"[claude-usage-daemon] Poll fehlgeschlagen: {exc}")
-            _state["ok"] = False
+        if time.time() >= next_token_poll:
+            try:
+                _poll_once()
+            except Exception as exc:  # Daemon soll bei Fehlern weiterlaufen
+                print(f"[claude-usage-daemon] Poll fehlgeschlagen: {exc}")
+                _state["ok"] = False
+            next_token_poll = time.time() + TOKEN_POLL_INTERVAL_S
         _state["epoch"] = int(time.time())
         _state.update(_read_claude_status())
         try:
@@ -174,11 +181,14 @@ def _poll_loop() -> None:
             asyncio.run(_push_via_ble(payload))
         except Exception as exc:
             print(f"[claude-usage-daemon] BLE-Push fehlgeschlagen: {exc}")
-        time.sleep(POLL_INTERVAL_S)
+        time.sleep(BLE_PUSH_INTERVAL_S)
 
 
 def main() -> None:
-    print(f"[claude-usage-daemon] BLE-Push alle {POLL_INTERVAL_S}s an '{BLE_DEVICE_NAME}'")
+    print(
+        f"[claude-usage-daemon] BLE-Push alle {BLE_PUSH_INTERVAL_S}s an "
+        f"'{BLE_DEVICE_NAME}', Token-Poll alle {TOKEN_POLL_INTERVAL_S}s"
+    )
     _poll_loop()
 
 
